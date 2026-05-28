@@ -3,13 +3,19 @@ requires = ["setuptools>=69.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ragbase"
+name = "quickrag"
 version = "0.1.0"
 description = "Drop-in RAG SDK for website chatbots"
 requires-python = ">=3.10"
 dependencies = [
     "sentence-transformers",
     "chromadb",
+    "google-genai",
+    "python-dotenv",
+    "requests",
+    "fastapi",
+    "uvicorn",
+     "typer",
 ]
 
 [project.optional-dependencies]
@@ -20,7 +26,7 @@ dev = [
 ]
 
 [project.scripts]
-ragbase = "ragbase.cli:main"
+quickrag = "quickrag.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["ragbase*"]
+include = ["quickrag*"]
