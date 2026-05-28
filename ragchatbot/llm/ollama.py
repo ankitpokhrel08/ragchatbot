@@ -1,5 +1,5 @@
 import requests
-from quickrag.llm.base import BaseLLM
+from ragchatbot.llm.base import BaseLLM
 
 
 class OllamaLLM(BaseLLM):

@@ -6,7 +6,7 @@ from typing import Optional
 load_dotenv()
 
 app = typer.Typer(
-    name="quickrag",
+    name="ragchatbot",
     help="Drop-in RAG SDK for website chatbots.",
     add_completion=False
 )
@@ -16,9 +16,9 @@ app = typer.Typer(
 
 @app.command()
 def init():
-    """Scaffold a new quickrag project in current directory."""
+    """Scaffold a new ragchatbot project in current directory."""
 
-    typer.echo("Initializing quickrag project...")
+    typer.echo("Initializing ragchatbot project...")
 
     # create folders
     folders = ["docs", "chroma_db", "model_cache"]
@@ -30,9 +30,9 @@ def init():
     if not os.path.exists(".env"):
         with open(".env", "w") as f:
             f.write("GEMINI_API_KEY=your-gemini-api-key\n")
-            f.write("quickrag_DOCS=./docs\n")
-            f.write("quickrag_DB=./chroma_db\n")
-            f.write("quickrag_LLM=gemini\n")
+            f.write("ragchatbot_DOCS=./docs\n")
+            f.write("ragchatbot_DB=./chroma_db\n")
+            f.write("ragchatbot_LLM=gemini\n")
             f.write("HF_HUB_OFFLINE=0\n")
         typer.echo("  created .env")
     else:
@@ -55,8 +55,8 @@ def init():
     typer.echo("\nDone. Next steps:")
     typer.echo("  1. Add your docs to docs/")
     typer.echo("  2. Set GEMINI_API_KEY in .env")
-    typer.echo("  3. Run: quickrag verify")
-    typer.echo("  4. Run: quickrag start")
+    typer.echo("  3. Run: ragchatbot verify")
+    typer.echo("  4. Run: ragchatbot start")
 
 
 # ── VERIFY ────────────────────────────────────────────────────────────────────
@@ -65,11 +65,11 @@ def init():
 def verify():
     """Check all config, dependencies, and connections are working."""
 
-    typer.echo("Verifying quickrag setup...\n")
+    typer.echo("Verifying ragchatbot setup...\n")
     all_ok = True
 
     # check docs folder
-    docs = os.getenv("quickrag_DOCS", "./docs")
+    docs = os.getenv("ragchatbot_DOCS", "./docs")
     if os.path.exists(docs):
         files = [f for f in os.listdir(docs) if f.endswith((".md", ".txt"))]
         if files:
@@ -82,7 +82,7 @@ def verify():
         all_ok = False
 
     # check gemini api key
-    llm = os.getenv("quickrag_LLM", "gemini")
+    llm = os.getenv("ragchatbot_LLM", "gemini")
     if llm == "gemini":
         key = os.getenv("GEMINI_API_KEY", "")
         if key and key != "your-gemini-api-key":
@@ -105,7 +105,7 @@ def verify():
     # check chromadb
     try:
         import chromadb
-        db_path = os.getenv("quickrag_DB", "./chroma_db")
+        db_path = os.getenv("ragchatbot_DB", "./chroma_db")
         client = chromadb.PersistentClient(path=db_path)
         typer.echo(f"  ✅ ChromaDB — connected")
     except Exception as e:
@@ -124,7 +124,7 @@ def verify():
     # final verdict
     typer.echo("")
     if all_ok:
-        typer.echo("All checks passed. Run: quickrag start")
+        typer.echo("All checks passed. Run: ragchatbot start")
     else:
         typer.echo("Fix the issues above then run verify again.")
 
@@ -138,18 +138,18 @@ def start(
     llm: str = typer.Option(None, help="LLM to use: gemini or ollama."),
     reload: bool = typer.Option(False, help="Auto-reload on code changes.")
 ):
-    """Index docs and start the quickrag API server."""
+    """Index docs and start the ragchatbot API server."""
 
     # override LLM from flag or fall back to .env
     if llm:
-        os.environ["quickrag_LLM"] = llm
+        os.environ["ragchatbot_LLM"] = llm
 
-    typer.echo(f"Starting quickrag server on http://localhost:{port}")
+    typer.echo(f"Starting ragchatbot server on http://localhost:{port}")
     typer.echo(f"API docs at http://localhost:{port}/docs\n")
 
     import uvicorn
     uvicorn.run(
-        "quickrag.server:app",
+        "ragchatbot.server:app",
         host=host,
         port=port,
         reload=reload
@@ -166,11 +166,11 @@ def ask(
 ):
     """Ask a question directly from terminal."""
 
-    from quickrag import RAG
+    from ragchatbot import RAG
 
-    llm = llm or os.getenv("quickrag_LLM", "gemini")
-    docs = os.getenv("quickrag_DOCS", "./docs")
-    db = os.getenv("quickrag_DB", "./chroma_db")
+    llm = llm or os.getenv("ragchatbot_LLM", "gemini")
+    docs = os.getenv("ragchatbot_DOCS", "./docs")
+    db = os.getenv("ragchatbot_DB", "./chroma_db")
 
     rag = RAG(docs=docs, db_path=db, llm=llm, n_results=n_results)
     rag.index()

@@ -1,4 +1,4 @@
-from quickrag import RAG
+from ragchatbot import RAG
 import os
 
 # ── TEST GEMINI ───────────────────────────────────────────────────────────────

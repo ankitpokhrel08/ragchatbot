@@ -1,15 +1,15 @@
-# Contributing to quickrag
+# Contributing to ragchatbot
 
-quickrag is a drop-in RAG SDK that lets developers add semantic search chatbots to their websites with minimal setup. Contributions are welcome — bug fixes, new features, documentation improvements, and new LLM adapters.
+ragchatbot is a drop-in RAG SDK that lets developers add semantic search chatbots to their websites with minimal setup. Contributions are welcome — bug fixes, new features, documentation improvements, and new LLM adapters.
 
 ---
 
-## How quickrag Works — Architecture Overview
+## How ragchatbot Works — Architecture Overview
 
-Understanding the architecture before contributing is important. quickrag is built in clean layers — each with one job.
+Understanding the architecture before contributing is important. ragchatbot is built in clean layers — each with one job.
 
 ```
-quickrag/
+ragchatbot/
 ├── parser.py       reads .md and .txt files, strips formatting, returns clean text
 ├── chunker.py      splits text into overlapping word chunks (150 words, 30 overlap)
 ├── embedder.py     generates 384-dim vectors using all-MiniLM-L6-v2 (sentence-transformers)
@@ -26,7 +26,7 @@ quickrag/
 ### Request lifecycle
 
 ```
-quickrag ask "question"
+ragchatbot ask "question"
       |
 cli.py -> RAG.ask()
       |
@@ -42,7 +42,7 @@ llm.generate()                # chunks + question -> prompt -> LLM -> answer
 ### Indexing lifecycle
 
 ```
-quickrag start
+ragchatbot start
       |
 server.py lifespan -> RAG.index()
       |
@@ -68,8 +68,8 @@ for each file in docs/:
 ### Clone and install
 
 ```bash
-git clone https://github.com/yourusername/quickrag
-cd quickrag
+git clone https://github.com/yourusername/ragchatbot
+cd ragchatbot
 python -m venv myenv
 source myenv/bin/activate      # mac/linux
 pip install -e ".[dev]"
@@ -85,7 +85,7 @@ cp .env.example .env
 ### Verify setup
 
 ```bash
-quickrag verify
+ragchatbot verify
 ```
 
 ### Run tests
@@ -99,8 +99,8 @@ pytest tests/
 ## Project Structure
 
 ```
-quickrag/                     # project root
-├── quickrag/                 # Python package
+ragchatbot/                     # project root
+├── ragchatbot/                 # Python package
 │   ├── __init__.py          # RAG class — public interface
 │   ├── parser.py
 │   ├── chunker.py
@@ -126,12 +126,12 @@ quickrag/                     # project root
 
 ## Adding a New LLM Adapter
 
-This is the most common contribution. quickrag uses an adapter pattern — every LLM implements the same interface.
+This is the most common contribution. ragchatbot uses an adapter pattern — every LLM implements the same interface.
 
-### Step 1 — create `quickrag/llm/your_llm.py`
+### Step 1 — create `ragchatbot/llm/your_llm.py`
 
 ```python
-from quickrag.llm.base import BaseLLM
+from ragchatbot.llm.base import BaseLLM
 
 
 class YourLLM(BaseLLM):
@@ -168,18 +168,18 @@ class YourLLM(BaseLLM):
         }
 ```
 
-### Step 2 — register in `quickrag/__init__.py`
+### Step 2 — register in `ragchatbot/__init__.py`
 
 ```python
 def _load_llm(self, llm: str, **kwargs):
     if llm == "gemini":
-        from quickrag.llm.gemini import GeminiLLM
+        from ragchatbot.llm.gemini import GeminiLLM
         return GeminiLLM(**kwargs)
     elif llm == "ollama":
-        from quickrag.llm.ollama import OllamaLLM
+        from ragchatbot.llm.ollama import OllamaLLM
         return OllamaLLM(**kwargs)
     elif llm == "your_llm":                    # add this
-        from quickrag.llm.your_llm import YourLLM
+        from ragchatbot.llm.your_llm import YourLLM
         return YourLLM(**kwargs)
 ```
 
@@ -195,7 +195,7 @@ dependencies = [
 ### Step 4 — test it
 
 ```python
-from quickrag import RAG
+from ragchatbot import RAG
 rag = RAG(docs="./docs", llm="your_llm")
 rag.index()
 result = rag.ask("test question")
@@ -206,9 +206,9 @@ print(result)
 
 ## Adding a New File Parser
 
-Currently quickrag supports `.md` and `.txt`. To add PDF, DOCX, etc:
+Currently ragchatbot supports `.md` and `.txt`. To add PDF, DOCX, etc:
 
-### Step 1 — add handler in `quickrag/parser.py`
+### Step 1 — add handler in `ragchatbot/parser.py`
 
 ```python
 def parse_file(filepath: str, strip_math: bool = False, strip_code: bool = True) -> str:
@@ -231,7 +231,7 @@ def parse_pdf(filepath: str) -> str:
     ...
 ```
 
-### Step 2 — update `quickrag/__init__.py` index method
+### Step 2 — update `ragchatbot/__init__.py` index method
 
 ```python
 # update this line
@@ -287,8 +287,8 @@ refactor: simplify chunker overlap logic
 
 ```bash
 # fork and clone
-git clone https://github.com/yourusername/quickrag
-cd quickrag
+git clone https://github.com/yourusername/ragchatbot
+cd ragchatbot
 
 # create branch
 git checkout -b feat/openai-adapter

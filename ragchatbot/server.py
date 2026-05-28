@@ -4,8 +4,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from quickrag import RAG
-from quickrag.store import collection_stats
+from ragchatbot import RAG
+from ragchatbot.store import collection_stats
 
 load_dotenv()
 
@@ -33,8 +33,8 @@ def get_rag(llm: str, n_results: int) -> RAG:
     """Get or create RAG instance for given LLM."""
     if llm not in _rag_instances:
         _rag_instances[llm] = RAG(
-            docs=os.getenv("quickrag_DOCS", "./docs"),
-            db_path=os.getenv("quickrag_DB", "./chroma_db"),
+            docs=os.getenv("ragchatbot_DOCS", "./docs"),
+            db_path=os.getenv("ragchatbot_DB", "./chroma_db"),
             llm=llm,
             n_results=n_results
         )
@@ -46,24 +46,24 @@ def get_rag(llm: str, n_results: int) -> RAG:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Index docs when server starts."""
-    print("quickrag server starting...")
-    docs = os.getenv("quickrag_DOCS", "./docs")
-    db = os.getenv("quickrag_DB", "./chroma_db")
-    default_llm = os.getenv("quickrag_LLM", "gemini")
+    print("ragchatbot server starting...")
+    docs = os.getenv("ragchatbot_DOCS", "./docs")
+    db = os.getenv("ragchatbot_DB", "./chroma_db")
+    default_llm = os.getenv("ragchatbot_LLM", "gemini")
 
     rag = RAG(docs=docs, db_path=db, llm=default_llm)
     rag.index()
     _rag_instances[default_llm] = rag
 
-    print("quickrag server ready.")
+    print("ragchatbot server ready.")
     yield
-    print("quickrag server shutting down.")
+    print("ragchatbot server shutting down.")
 
 
 # ── FASTAPI APP ───────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="quickrag",
+    title="ragchatbot",
     description="Drop-in RAG API for your website",
     version="0.1.0",
     lifespan=lifespan
@@ -88,7 +88,7 @@ def health():
 @app.get("/stats")
 def stats():
     """Return indexing stats."""
-    db = os.getenv("quickrag_DB", "./chroma_db")
+    db = os.getenv("ragchatbot_DB", "./chroma_db")
     collection_stats(db)
     return {"status": "ok"}
 

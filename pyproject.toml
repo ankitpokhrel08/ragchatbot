@@ -3,7 +3,7 @@ requires = ["setuptools>=69.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "quickrag"
+name = "ragchatbot"
 version = "0.1.0"
 description = "Drop-in RAG SDK for website chatbots"
 requires-python = ">=3.10"
@@ -26,7 +26,7 @@ dev = [
 ]
 
 [project.scripts]
-quickrag = "quickrag.cli:main"
+ragchatbot = "ragchatbot.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["quickrag*"]
+include = ["ragchatbot*"]

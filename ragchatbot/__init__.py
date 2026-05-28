@@ -1,8 +1,8 @@
 import os
-from quickrag.parser import parse_file
-from quickrag.chunker import chunk_text
-from quickrag.embedder import embed_chunks, embed_query
-from quickrag.store import (
+from ragchatbot.parser import parse_file
+from ragchatbot.chunker import chunk_text
+from ragchatbot.embedder import embed_chunks, embed_query
+from ragchatbot.store import (
     hash_file,
     is_file_indexed,
     add_chunks,
@@ -13,7 +13,7 @@ from quickrag.store import (
 
 class RAG:
     """
-    Main quickrag interface.
+    Main ragchatbot interface.
 
     Usage with Gemini:
         rag = RAG(docs="./docs", llm="gemini")
@@ -45,11 +45,11 @@ class RAG:
         Lazy import — only imports what's needed.
         """
         if llm == "gemini":
-            from quickrag.llm.gemini import GeminiLLM
+            from ragchatbot.llm.gemini import GeminiLLM
             return GeminiLLM(**kwargs)
 
         elif llm == "ollama":
-            from quickrag.llm.ollama import OllamaLLM
+            from ragchatbot.llm.ollama import OllamaLLM
             return OllamaLLM(**kwargs)
 
         else:
@@ -99,7 +99,7 @@ class RAG:
         """Start FastAPI server."""
         import uvicorn
         uvicorn.run(
-            "quickrag.server:app",
+            "ragchatbot.server:app",
             host=host,
             port=port,
             reload=reload

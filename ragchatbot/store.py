@@ -22,7 +22,7 @@ def get_collection(db_path: str = "./chroma_db") -> chromadb.Collection:
     _client = chromadb.PersistentClient(path=db_path)
 
     _collection = _client.get_or_create_collection(
-        name="quickrag",
+        name="ragchatbot",
         metadata={"hnsw:space": "cosine"}  # use cosine similarity for all queries
     )
 
