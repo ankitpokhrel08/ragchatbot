@@ -131,3 +131,18 @@ class RAG:
             port=port,
             reload=reload
         )
+
+
+    def ask_stream(self, question: str) -> tuple:
+        """
+        Stream answer token by token.
+
+        Returns:
+            (sources, generator) — sources list and token generator
+            Get sources first before consuming the generator.
+        """
+        query_vector = embed_query(question)
+        chunks = query_chunks(query_vector, self.n_results, self.db_path)
+        sources = self.llm._extract_sources(chunks)
+        token_stream = self.llm.generate_stream(question, chunks)
+        return sources, token_stream

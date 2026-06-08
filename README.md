@@ -55,9 +55,10 @@ ragchatbot setup
 
 Setup will:
 
-- Ask which LLM you want to use (Gemini, OpenAI, or Ollama)
+- Ask which LLM you want (Gemini, OpenAI, or Ollama)
 - Ask which model
 - Ask for your API key
+- Optionally protect your `/ask` endpoint with an API key
 - Create all folders
 - Scan and index your docs automatically
 
@@ -98,18 +99,53 @@ Interactive API docs at `http://localhost:8000/docs`
 Once the server is running, your frontend can call it:
 
 ```javascript
+// Standard request
 const response = await fetch("http://localhost:8000/ask", {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
+  headers: {
+    "Content-Type": "application/json",
+    "X-API-Key": "your-api-key", // only if auth is enabled
+  },
   body: JSON.stringify({
     question: "What is your refund policy?",
   }),
 });
 
 const data = await response.json();
-
 console.log(data.answer); // answer from your docs
 console.log(data.sources); // ["refund-policy.pdf"]
+```
+
+### Streaming responses
+
+```javascript
+// Streaming request — tokens arrive as they're generated
+const response = await fetch("http://localhost:8000/ask", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-API-Key": "your-api-key", // only if auth is enabled
+  },
+  body: JSON.stringify({
+    question: "What is your refund policy?",
+    stream: true,
+  }),
+});
+
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  const chunk = decoder.decode(value);
+  if (chunk.startsWith("\n\n__sources__:")) {
+    const sources = JSON.parse(chunk.replace("\n\n__sources__:", ""));
+    console.log("Sources:", sources);
+  } else {
+    process.stdout.write(chunk); // print tokens as they arrive
+  }
+}
 ```
 
 Works with React, Vue, vanilla JS, Next.js — any frontend.
@@ -120,15 +156,41 @@ Works with React, Vue, vanilla JS, Next.js — any frontend.
 
 ```bash
 ragchatbot setup                        # guided setup — LLM, API key, index docs
-ragchatbot ask "your question"          # ask a question from terminal
+ragchatbot ask "your question"          # ask a question from terminal (streams by default)
+ragchatbot ask "question" --no-stream   # wait for full answer
 ragchatbot ask "question" --llm ollama  # ask using a specific LLM
 ragchatbot start                        # index docs + start API server
 ragchatbot start --port 9000            # use a different port
 ragchatbot start --llm ollama           # start with a specific LLM
+ragchatbot stats                        # show what's indexed in ChromaDB
 ragchatbot verify                       # re-check everything is working
 ragchatbot init                         # scaffold folders + .env manually (advanced)
 ragchatbot --help                       # show all commands
 ```
+
+---
+
+## Auth on `/ask`
+
+To protect your endpoint so only your frontend can use it:
+
+```bash
+ragchatbot setup  # choose "y" when asked about auth
+```
+
+Or add manually to `.env`:
+
+```env
+RAGCHATBOT_API_KEY=your-secret-key
+```
+
+Then pass it in every request:
+
+```javascript
+headers: { "X-API-Key": "your-secret-key" }
+```
+
+Without the key, the server returns `401 Unauthorized`.
 
 ---
 
@@ -142,7 +204,7 @@ ollama serve
 ollama pull llama3.2
 ```
 
-Then run setup and choose Ollama, or switch in `.env`:
+Then run setup and choose Ollama, or set in `.env`:
 
 ```env
 ragchatbot_LLM=ollama
@@ -182,15 +244,16 @@ ragchatbot_MODEL=gpt-4o-mini
 
 All settings live in `.env` (created automatically by `ragchatbot setup`):
 
-| Setting            | Default         | Description                                 |
-| ------------------ | --------------- | ------------------------------------------- |
-| `GEMINI_API_KEY`   | —               | Your Gemini API key                         |
-| `OPENAI_API_KEY`   | —               | Your OpenAI API key                         |
-| `ragchatbot_DOCS`  | `./docs`        | Folder containing your docs                 |
-| `ragchatbot_DB`    | `./chroma_db`   | Where vectors are stored                    |
-| `ragchatbot_LLM`   | `gemini`        | Which LLM: `gemini`, `openai`, or `ollama`  |
-| `ragchatbot_MODEL` | per LLM default | Model name — set automatically during setup |
-| `HF_HUB_OFFLINE`   | `1`             | Set to `0` only on first run                |
+| Setting              | Default         | Description                                 |
+| -------------------- | --------------- | ------------------------------------------- |
+| `GEMINI_API_KEY`     | —               | Your Gemini API key                         |
+| `OPENAI_API_KEY`     | —               | Your OpenAI API key                         |
+| `ragchatbot_DOCS`    | `./docs`        | Folder containing your docs                 |
+| `ragchatbot_DB`      | `./chroma_db`   | Where vectors are stored                    |
+| `ragchatbot_LLM`     | `gemini`        | Which LLM: `gemini`, `openai`, or `ollama`  |
+| `ragchatbot_MODEL`   | per LLM default | Model name — set automatically during setup |
+| `RAGCHATBOT_API_KEY` | —               | Protect `/ask` with this key (optional)     |
+| `HF_HUB_OFFLINE`     | `1`             | Set to `0` only on first run                |
 
 ---
 

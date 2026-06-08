@@ -1,11 +1,14 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Security, Depends
+from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from ragchatbot import RAG
 from ragchatbot.store import collection_stats
+import json
+from fastapi.responses import StreamingResponse
 
 load_dotenv()
 
@@ -14,8 +17,9 @@ load_dotenv()
 
 class AskRequest(BaseModel):
     question: str
-    llm: str = "gemini"        # "gemini" or "ollama"
+    llm: str = "gemini"
     n_results: int = 3
+    stream: bool = False
 
 
 class AskResponse(BaseModel):
@@ -24,9 +28,30 @@ class AskResponse(BaseModel):
     question: str
 
 
+# ── AUTH ──────────────────────────────────────────────────────────────────────
+
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def verify_api_key(api_key: str = Security(API_KEY_HEADER)):
+    """
+    Check X-API-Key header if RAGCHATBOT_API_KEY is set in .env.
+    If RAGCHATBOT_API_KEY is not set — auth is disabled, all requests pass.
+    """
+    expected = os.getenv("RAGCHATBOT_API_KEY", "")
+
+    if not expected:
+        # auth not configured — open access
+        return
+
+    if api_key != expected:
+        raise HTTPException(
+            status_code=401,
+            detail="❌ Invalid or missing API key. Pass it as X-API-Key header."
+        )
+
+
 # ── APP STATE ─────────────────────────────────────────────────────────────────
 
-# rag instances cached per llm type — don't recreate on every request
 _rag_instances: dict = {}
 
 def get_rag(llm: str, n_results: int) -> RAG:
@@ -41,7 +66,7 @@ def get_rag(llm: str, n_results: int) -> RAG:
     return _rag_instances[llm]
 
 
-# ── LIFESPAN — index on startup ───────────────────────────────────────────────
+# ── LIFESPAN ──────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -55,6 +80,11 @@ async def lifespan(app: FastAPI):
     rag.index()
     _rag_instances[default_llm] = rag
 
+    if os.getenv("RAGCHATBOT_API_KEY"):
+        print("Auth enabled — X-API-Key header required on /ask")
+    else:
+        print("Auth disabled — set RAGCHATBOT_API_KEY in .env to enable")
+
     print("ragchatbot server ready.")
     yield
     print("ragchatbot server shutting down.")
@@ -65,13 +95,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ragchatbot",
     description="Drop-in RAG API for your website",
-    version="0.1.0",
+    version="1.0.0",
     lifespan=lifespan
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],        # restrict to your domain in production
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -82,7 +112,7 @@ app.add_middleware(
 @app.get("/health")
 def health():
     """Check server is running."""
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": "1.0.0"}
 
 
 @app.get("/stats")
@@ -92,33 +122,45 @@ def stats():
     collection_stats(db)
     return {"status": "ok"}
 
-
-@app.post("/ask", response_model=AskResponse)
+@app.post("/ask", dependencies=[Depends(verify_api_key)])
 def ask(request: AskRequest):
     """
     Ask a question against indexed docs.
 
     Body:
-        question:  user's question string
-        llm:       "gemini" or "ollama" (default: "gemini")
-        n_results: number of chunks to retrieve (default: 3)
-
-    Returns:
-        answer:   LLM generated answer
-        sources:  list of source filenames
-        question: echo of original question
+        question:  user's question
+        llm:       gemini | openai | ollama
+        n_results: chunks to retrieve (default 3)
+        stream:    stream tokens (default false)
     """
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
     try:
         rag = get_rag(request.llm, request.n_results)
-        result = rag.ask(request.question)
-        return AskResponse(
-            answer=result["answer"],
-            sources=result["sources"],
-            question=request.question
-        )
+
+        if request.stream:
+            sources, token_stream = rag.ask_stream(request.question)
+
+            def event_stream():
+                for token in token_stream:
+                    yield token
+                # send sources as final JSON chunk
+                yield f"\n\n__sources__:{json.dumps(sources)}"
+
+            return StreamingResponse(
+                event_stream(),
+                media_type="text/plain"
+            )
+
+        else:
+            result = rag.ask(request.question)
+            return AskResponse(
+                answer=result["answer"],
+                sources=result["sources"],
+                question=request.question
+            )
+
     except ConnectionError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:

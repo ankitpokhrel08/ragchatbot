@@ -1,7 +1,6 @@
 import os
 import typer
 from dotenv import load_dotenv
-from typing import Optional
 
 load_dotenv()
 
@@ -11,7 +10,7 @@ app = typer.Typer(
     add_completion=False
 )
 
-#Setup Command
+
 # ── SETUP ─────────────────────────────────────────────────────────────────────
 
 @app.command()
@@ -40,9 +39,9 @@ def setup():
 
     model_options = {
         "gemini": [
-            ("gemini-2.0-flash", "recommended"),
-            ("gemini-1.5-pro", "more capable, slower"),
-        ],
+    ("gemini-3.5-flash", "recommended, fastest"),
+    ("gemini-3.1-pro", "more capable, slower"),
+],
         "openai": [
             ("gpt-4o-mini", "recommended"),
             ("gpt-4o", "more capable, higher cost"),
@@ -87,7 +86,20 @@ def setup():
             typer.echo("❌ API key cannot be empty.")
             raise typer.Exit(1)
 
-    # ── STEP 4: write .env fresh ──────────────────────────────────────────────
+    # ── STEP 4: optional auth on /ask ─────────────────────────────────────────
+    typer.echo("\nOptional: Protect your /ask endpoint with an API key")
+    typer.echo("  If set, all requests must include X-API-Key header\n")
+    protect = typer.prompt("Enable auth on /ask? (y/n)", default="n").strip().lower()
+
+    ask_key = ""
+    if protect == "y":
+        ask_key = typer.prompt("Enter your API key (or press enter to generate one)").strip()
+        if not ask_key:
+            import secrets
+            ask_key = secrets.token_urlsafe(32)
+            typer.echo(f"  Generated key: {ask_key}")
+
+    # ── STEP 5: write .env fresh ──────────────────────────────────────────────
     typer.echo("\nSaving configuration...\n")
 
     env_lines = []
@@ -102,18 +114,23 @@ def setup():
     env_lines.append(f"ragchatbot_MODEL={model}\n")
     env_lines.append(f"HF_HUB_OFFLINE=0\n")
 
+    if ask_key:
+        env_lines.append(f"RAGCHATBOT_API_KEY={ask_key}\n")
+    else:
+        env_lines.append(f"# RAGCHATBOT_API_KEY=your-secret-key-here\n")
+
     with open(".env", "w") as f:
         f.writelines(env_lines)
 
     typer.echo("  ✅ .env written")
 
-    # ── STEP 5: create folders ────────────────────────────────────────────────
+    # ── STEP 6: create folders ────────────────────────────────────────────────
     os.makedirs("./docs", exist_ok=True)
     os.makedirs("./chroma_db", exist_ok=True)
     os.makedirs("./model_cache", exist_ok=True)
     typer.echo("  ✅ folders ready")
 
-    # ── STEP 6: verify embedding model + chromadb ─────────────────────────────
+    # ── STEP 7: verify embedding model + chromadb ─────────────────────────────
     typer.echo("\nRunning checks...\n")
 
     try:
@@ -141,7 +158,7 @@ def setup():
             typer.echo("  ❌ Ollama not running. Start with: ollama serve")
             raise typer.Exit(1)
 
-    # ── STEP 7: scan docs ─────────────────────────────────────────────────────
+    # ── STEP 8: scan docs ─────────────────────────────────────────────────────
     typer.echo("\nScanning docs/ for supported files...\n")
 
     supported = (".md", ".txt", ".pdf", ".docx")
@@ -159,7 +176,6 @@ def setup():
             typer.echo("Setup cancelled. Run ragchatbot setup again when ready.")
             raise typer.Exit(0)
 
-        # re-scan after user confirms
         files = scan_docs()
         if not files:
             typer.echo("❌ Still no files found in docs/. Exiting.")
@@ -170,8 +186,7 @@ def setup():
 
     typer.echo(f"\n  {len(files)} file(s) found. Indexing...\n")
 
-    # ── STEP 8: index ─────────────────────────────────────────────────────────
-    from ragchatbot import RAG
+    # ── STEP 9: index ─────────────────────────────────────────────────────────
     from ragchatbot.parser import parse_file
     from ragchatbot.chunker import chunk_text
     from ragchatbot.embedder import embed_chunks
@@ -207,8 +222,9 @@ def setup():
 @app.command()
 def ask(
     question: str = typer.Argument(..., help="Question to ask."),
-    llm: str = typer.Option(None, help="LLM to use: gemini or ollama."),
-    n_results: int = typer.Option(3, help="Number of chunks to retrieve.")
+    llm: str = typer.Option(None, help="LLM to use: gemini, openai, or ollama."),
+    n_results: int = typer.Option(3, help="Number of chunks to retrieve."),
+    no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming, wait for full answer.")
 ):
     """Ask a question directly from terminal."""
 
@@ -221,9 +237,18 @@ def ask(
     try:
         rag = RAG(docs=docs, db_path=db, llm=llm, n_results=n_results)
         rag.index()
-        result = rag.ask(question)
-        typer.echo(f"\nAnswer:\n{result['answer']}")
-        typer.echo(f"\nSources: {', '.join(result['sources'])}")
+
+        if no_stream:
+            result = rag.ask(question)
+            typer.echo(f"\nAnswer:\n{result['answer']}")
+            typer.echo(f"\nSources: {', '.join(result['sources'])}")
+        else:
+            typer.echo("\nAnswer:")
+            sources, token_stream = rag.ask_stream(question)
+            for token in token_stream:
+                typer.echo(token, nl=False)
+            typer.echo("")  # newline after stream ends
+            typer.echo(f"\nSources: {', '.join(sources) if sources else 'none'}")
 
     except FileNotFoundError as e:
         typer.echo(str(e))
@@ -237,14 +262,14 @@ def ask(
     except Exception as e:
         typer.echo(f"❌ Unexpected error: {str(e)}")
         raise typer.Exit(1)
-    
+
 # ── START ─────────────────────────────────────────────────────────────────────
 
 @app.command()
 def start(
     host: str = typer.Option("0.0.0.0", help="Host to bind server to."),
     port: int = typer.Option(8000, help="Port to run server on."),
-    llm: str = typer.Option(None, help="LLM to use: gemini or ollama."),
+    llm: str = typer.Option(None, help="LLM to use: gemini, openai, or ollama."),
     reload: bool = typer.Option(False, help="Auto-reload on code changes.")
 ):
     """Index docs and start the ragchatbot API server."""
@@ -267,6 +292,7 @@ def start(
         typer.echo(f"❌ Server failed to start: {str(e)}")
         raise typer.Exit(1)
 
+
 # ── INIT ──────────────────────────────────────────────────────────────────────
 
 @app.command()
@@ -275,25 +301,24 @@ def init():
 
     typer.echo("Initializing ragchatbot project...")
 
-    # create folders
     folders = ["docs", "chroma_db", "model_cache"]
     for folder in folders:
         os.makedirs(folder, exist_ok=True)
         typer.echo(f"  created {folder}/")
 
-    # create .env if not exists
     if not os.path.exists(".env"):
         with open(".env", "w") as f:
             f.write("GEMINI_API_KEY=your-gemini-api-key\n")
             f.write("ragchatbot_DOCS=./docs\n")
             f.write("ragchatbot_DB=./chroma_db\n")
             f.write("ragchatbot_LLM=gemini\n")
+            f.write("ragchatbot_MODEL=gemini-2.0-flash\n")
             f.write("HF_HUB_OFFLINE=0\n")
+            f.write("# RAGCHATBOT_API_KEY=your-secret-key-here\n")
         typer.echo("  created .env")
     else:
         typer.echo("  .env already exists — skipping")
 
-    # create .gitignore if not exists
     if not os.path.exists(".gitignore"):
         with open(".gitignore", "w") as f:
             f.write("myenv/\n")
@@ -314,6 +339,26 @@ def init():
     typer.echo("  4. Run: ragchatbot start")
 
 
+# ── STATS ─────────────────────────────────────────────────────────────────────
+
+@app.command()
+def stats():
+    """Show what's currently indexed in ChromaDB."""
+
+    from ragchatbot.store import collection_stats
+
+    db = os.getenv("ragchatbot_DB", "./chroma_db")
+
+    if not os.path.exists(db):
+        typer.echo("❌ No ChromaDB found. Run ragchatbot setup or ragchatbot start first.")
+        raise typer.Exit(1)
+
+    try:
+        collection_stats(db)
+    except Exception as e:
+        typer.echo(f"❌ Could not read stats — {str(e)}")
+        raise typer.Exit(1)
+
 # ── VERIFY ────────────────────────────────────────────────────────────────────
 
 @app.command()
@@ -330,14 +375,15 @@ def verify():
         if files:
             typer.echo(f"  ✅ docs folder — {len(files)} file(s) found")
         else:
-            typer.echo(f"  ⚠️  docs folder exists but no .md or .txt files found")
+            typer.echo(f"  ⚠️  docs folder exists but no supported files found (.md .txt .pdf .docx)")
             all_ok = False
     else:
         typer.echo(f"  ❌ docs folder not found: {docs}")
         all_ok = False
 
-    # check gemini api key
+    # check LLM config
     llm = os.getenv("ragchatbot_LLM", "gemini")
+
     if llm == "gemini":
         key = os.getenv("GEMINI_API_KEY", "")
         if key and key != "your-gemini-api-key":
@@ -346,8 +392,15 @@ def verify():
             typer.echo(f"  ❌ GEMINI_API_KEY — not set in .env")
             all_ok = False
 
-    # check ollama connection
-    if llm == "ollama":
+    elif llm == "openai":
+        key = os.getenv("OPENAI_API_KEY", "")
+        if key and key != "your-openai-api-key":
+            typer.echo(f"  ✅ OPENAI_API_KEY — set")
+        else:
+            typer.echo(f"  ❌ OPENAI_API_KEY — not set in .env")
+            all_ok = False
+
+    elif llm == "ollama":
         try:
             import requests
             response = requests.get("http://localhost:11434/api/tags", timeout=3)
@@ -361,7 +414,7 @@ def verify():
     try:
         import chromadb
         db_path = os.getenv("ragchatbot_DB", "./chroma_db")
-        client = chromadb.PersistentClient(path=db_path)
+        chromadb.PersistentClient(path=db_path)
         typer.echo(f"  ✅ ChromaDB — connected")
     except Exception as e:
         typer.echo(f"  ❌ ChromaDB — {str(e)}")
@@ -376,14 +429,19 @@ def verify():
         typer.echo(f"  ❌ Embedding model — {str(e)}")
         all_ok = False
 
+    # check auth status
+    ask_key = os.getenv("RAGCHATBOT_API_KEY", "")
+    if ask_key:
+        typer.echo(f"  ✅ Auth — enabled (X-API-Key required on /ask)")
+    else:
+        typer.echo(f"  ℹ️  Auth — disabled (set RAGCHATBOT_API_KEY in .env to enable)")
+
     # final verdict
     typer.echo("")
     if all_ok:
         typer.echo("All checks passed. Run: ragchatbot start")
     else:
         typer.echo("Fix the issues above then run verify again.")
-
-
 
 
 # ── ENTRY POINT ───────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import os
 import requests
 from ragchatbot.llm.base import BaseLLM
+from typing import Generator
 
 
 class OllamaLLM(BaseLLM):
@@ -53,3 +54,39 @@ class OllamaLLM(BaseLLM):
 
         sources = self._extract_sources(context_chunks)
         return {"answer": answer, "sources": sources}
+    
+    def generate_stream(self, question: str, context_chunks: list[dict]) -> Generator:
+        """Stream answer tokens from Ollama."""
+        if not context_chunks:
+            yield "I don't have that information in my docs."
+            return
+
+        prompt = self._build_prompt(question, context_chunks)
+
+        try:
+            response = requests.post(
+                f"{self.host}/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": prompt,
+                    "stream": True
+                },
+                stream=True,
+                timeout=120
+            )
+            response.raise_for_status()
+
+            for line in response.iter_lines():
+                if line:
+                    import json
+                    data = json.loads(line)
+                    token = data.get("response", "")
+                    if token:
+                        yield token
+                    if data.get("done", False):
+                        break
+
+        except requests.exceptions.Timeout:
+            yield "❌ Ollama timed out. Model may still be loading."
+        except Exception as e:
+            yield f"❌ Ollama streaming error: {str(e)}"

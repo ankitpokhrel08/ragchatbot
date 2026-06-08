@@ -1,8 +1,10 @@
+from email.generator import Generator
 import os
 import time
 from dotenv import load_dotenv
 from google import genai
 from ragchatbot.llm.base import BaseLLM
+from typing import Generator
 
 load_dotenv()
 
@@ -11,7 +13,7 @@ class GeminiLLM(BaseLLM):
 
     def __init__(self, api_key: str = None, model: str = None):
         key = api_key or os.getenv("GEMINI_API_KEY")
-        model = model or os.getenv("ragchatbot_MODEL", "gemini-2.0-flash")
+        model = model or os.getenv("ragchatbot_MODEL", "gemini-3.5-flash")
 
         if not key:
             raise ValueError(
@@ -52,3 +54,21 @@ class GeminiLLM(BaseLLM):
 
         sources = self._extract_sources(context_chunks)
         return {"answer": answer, "sources": sources}
+    
+    def generate_stream(self, question: str, context_chunks: list[dict]) -> Generator:
+        """Stream answer tokens from Gemini."""
+        if not context_chunks:
+            yield "I don't have that information in my docs."
+            return
+
+        prompt = self._build_prompt(question, context_chunks)
+
+        try:
+            for chunk in self.client.models.generate_content_stream(
+                model=self.model,
+                contents=prompt
+            ):
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            yield f"❌ Gemini streaming error: {str(e)}"

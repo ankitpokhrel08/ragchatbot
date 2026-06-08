@@ -14,13 +14,13 @@ ragchatbot/
 ├── chunker.py      splits text into 150-word overlapping chunks (30-word overlap)
 ├── embedder.py     generates 384-dim vectors via all-MiniLM-L6-v2
 ├── store.py        all ChromaDB ops — add, query, delete, hash-based skip
-├── server.py       FastAPI — POST /ask, GET /health, GET /stats, CORS
-├── cli.py          Typer CLI — setup, init, verify, start, ask
+├── server.py       FastAPI — POST /ask, GET /health, GET /stats, CORS, auth
+├── cli.py          Typer CLI — setup, init, verify, start, ask, stats
 ├── __init__.py     RAG class — public interface, wires all layers
 └── llm/
-    ├── base.py     abstract interface all LLM adapters must implement
+    ├── base.py     abstract interface — generate() and generate_stream() required
     ├── gemini.py   Gemini adapter via google-genai
-    ├── openai.py   OpenAI adapter via openai SDK
+    ├── openai.py   OpenAI adapter via openai SDK (optional dep)
     └── ollama.py   Ollama adapter via local HTTP (localhost:11434)
 ```
 
@@ -30,7 +30,7 @@ ragchatbot/
 ragchatbot ask "question"
         |
         v
-cli.py -> RAG.ask()
+cli.py -> RAG.ask() or RAG.ask_stream()
         |
         v
 embedder.embed_query()     # question -> 384-dim vector
@@ -40,9 +40,11 @@ store.query_chunks()       # cosine search ChromaDB -> top 3 chunks
         |
         v
 llm.generate()             # chunks + question -> prompt -> LLM -> answer
+or
+llm.generate_stream()      # same but yields tokens one by one
         |
         v
-{ answer, sources }
+{ answer, sources }  or  (sources, token_generator)
 ```
 
 ### Indexing lifecycle
@@ -63,43 +65,12 @@ delete_file_chunks(stale)    # remove from ChromaDB
         |
         v
 for each file in docs/:
-    parser.parse_file()      # clean text (md/txt/pdf/docx)
+    parser.parse_file()      # clean text (.md/.txt/.pdf/.docx)
     chunker.chunk_text()     # split into chunks
     embedder.embed_chunks()  # generate vectors
     store.hash_file()        # MD5 fingerprint
     store.is_file_indexed()  # skip if unchanged
     store.add_chunks()       # store in ChromaDB
-```
-
-### Setup lifecycle
-
-```text
-ragchatbot setup
-        |
-        v
-prompt: LLM choice (gemini / openai / ollama)
-        |
-        v
-prompt: model choice (list + custom option)
-        |
-        v
-prompt: API key (hidden input, skipped for ollama)
-        |
-        v
-write .env fresh
-        |
-        v
-checks: embedding model, ChromaDB, Ollama (if applicable)
-        |
-        v
-scan docs/ for supported files (.md .txt .pdf .docx)
-if empty -> prompt user to add files, wait for confirmation
-        |
-        v
-index all docs with progress output
-        |
-        v
-print next steps
 ```
 
 ---
@@ -116,19 +87,24 @@ cp .env.example .env
 
 # fill in your API key in .env
 ragchatbot verify
+
+# run tests
+pytest tests/ -v
 ```
 
 ---
 
 ## Adding a New LLM Adapter
 
-Most common contribution. Every LLM follows the same interface.
+Most common contribution. Every LLM must implement both `generate` and `generate_stream`.
 
 ### 1. Create `ragchatbot/llm/yourllm.py`
 
 ```python
 import os
+from typing import Generator
 from ragchatbot.llm.base import BaseLLM
+
 
 class YourLLM(BaseLLM):
 
@@ -162,21 +138,27 @@ class YourLLM(BaseLLM):
             answer = f"❌ Error: {str(e)}"
 
         return {"answer": answer, "sources": sources}
+
+    def generate_stream(self, question: str, context_chunks: list[dict]) -> Generator:
+        if not context_chunks:
+            yield "I don't have that information in my docs."
+            return
+
+        prompt = self._build_prompt(question, context_chunks)
+
+        try:
+            for chunk in self.client.stream(prompt):
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            yield f"❌ Streaming error: {str(e)}"
 ```
 
 ### 2. Register in `ragchatbot/__init__.py`
 
 ```python
 def _load_llm(self, llm: str, **kwargs):
-    if llm == "gemini":
-        from ragchatbot.llm.gemini import GeminiLLM
-        return GeminiLLM(**kwargs)
-    elif llm == "openai":
-        from ragchatbot.llm.openai import OpenAILLM
-        return OpenAILLM(**kwargs)
-    elif llm == "ollama":
-        from ragchatbot.llm.ollama import OllamaLLM
-        return OllamaLLM(**kwargs)
+    ...
     elif llm == "yourllm":
         from ragchatbot.llm.yourllm import YourLLM
         return YourLLM(**kwargs)
@@ -203,6 +185,11 @@ from ragchatbot import RAG
 rag = RAG(docs="./docs", llm="yourllm")
 rag.index()
 print(rag.ask("test question"))
+
+# test streaming
+sources, stream = rag.ask_stream("test question")
+for token in stream:
+    print(token, end="", flush=True)
 ```
 
 ---
@@ -242,6 +229,18 @@ supported = (".md", ".txt", ".pdf", ".docx", ".html")
 
 ### 3. Add dependency to `pyproject.toml`
 
+### 4. Add a test in `tests/test_parser.py`
+
+---
+
+## Running Tests
+
+```bash
+pytest tests/ -v
+```
+
+19 tests cover chunker, embedder, parser, store, and RAG end-to-end. All must pass before submitting a PR.
+
 ---
 
 ## Guidelines
@@ -250,26 +249,29 @@ supported = (".md", ".txt", ".pdf", ".docx", ".html")
 
 - Bug fixes
 - New LLM adapters (Anthropic, Cohere, Mistral)
-- New file parsers (HTML, CSV, EPUB)
-- Test coverage
+- New file parsers (HTML, CSV)
+- Test coverage improvements
 - Documentation improvements
 
 ### Backlog — not yet
 
-- Streaming responses
+- Streaming responses ✅ done
+- Auth on `/ask` ✅ done
 - Remote vector DBs (Qdrant, Pinecone)
 - Web UI
-- Auth on `/ask`
 - Auto file-watcher
+- `reindex` command for specific files
 
 ### Code rules
 
 - One job per file — don't mix concerns
 - Type hints on all functions
 - Docstrings on public methods
+- Both `generate()` and `generate_stream()` must be implemented in every LLM adapter
 - Don't change `BaseLLM` interface — it's the contract
-- No new core dependencies without discussion (optional deps via `[project.optional-dependencies]` are fine)
+- No new core dependencies without discussion
 - Error messages must be human-readable — no raw tracebacks to the user
+- All new features need tests
 
 ### Commit format
 
@@ -278,6 +280,7 @@ feat: add Anthropic adapter
 fix: handle corrupted PDF during indexing
 docs: update contributing guide
 refactor: simplify chunker logic
+test: add parser tests for docx
 ```
 
 ---
@@ -287,8 +290,8 @@ refactor: simplify chunker logic
 ```bash
 git checkout -b feat/anthropic-adapter
 
-# make changes + write tests
-pytest tests/
+# make changes
+pytest tests/ -v   # all must pass
 
 git commit -m "feat: add Anthropic adapter"
 git push origin feat/anthropic-adapter
@@ -299,6 +302,7 @@ PR must include:
 - What it does
 - How to test it
 - New dependencies (if any)
+- Tests added or updated
 
 ---
 

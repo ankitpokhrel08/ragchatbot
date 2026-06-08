@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Generator
 
 
 class BaseLLM(ABC):
@@ -11,12 +12,8 @@ class BaseLLM(ABC):
     @abstractmethod
     def generate(self, question: str, context_chunks: list[dict]) -> dict:
         """
-        Generate an answer from question + retrieved chunks.
-
-        Args:
-            question:       user's raw question string
-            context_chunks: list of dicts from store.query_chunks()
-                            each dict has keys: text, source, score
+        Generate a full answer from question + retrieved chunks.
+        Returns complete answer at once.
 
         Returns dict:
             {
@@ -26,12 +23,20 @@ class BaseLLM(ABC):
         """
         pass
 
+    @abstractmethod
+    def generate_stream(self, question: str, context_chunks: list[dict]) -> Generator:
+        """
+        Stream answer token by token.
+
+        Yields:
+            str tokens as they arrive from the LLM.
+
+        Sources are NOT yielded — caller should get them via
+        _extract_sources() before starting the stream.
+        """
+        pass
+
     def _build_prompt(self, question: str, context_chunks: list[dict]) -> str:
-        """
-        Build the RAG prompt template.
-        Shared across all LLM adapters — lives in base class.
-        """
-        # Extract chunk texts and join
         context = "\n\n".join(
             f"[Source: {chunk['source']}]\n{chunk['text']}"
             for chunk in context_chunks
@@ -50,10 +55,6 @@ Question: {question}
 Answer:"""
 
     def _extract_sources(self, context_chunks: list[dict]) -> list[str]:
-        """
-        Extract unique source filenames from retrieved chunks.
-        Deduplicates — same file can appear multiple times in top-K.
-        """
         seen = set()
         sources = []
         for chunk in context_chunks:

@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 from ragchatbot.llm.base import BaseLLM
+from typing import Generator
 
 load_dotenv()
 
@@ -63,3 +64,33 @@ class OpenAILLM(BaseLLM):
                 answer = f"❌ OpenAI error: {error}"
 
         return {"answer": answer, "sources": sources}
+    
+
+    def generate_stream(self, question: str, context_chunks: list[dict]) -> Generator:
+        """Stream answer tokens from OpenAI."""
+        if not context_chunks:
+            yield "I don't have that information in my docs."
+            return
+
+        prompt = self._build_prompt(question, context_chunks)
+
+        try:
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                stream=True
+            )
+            for chunk in stream:
+                token = chunk.choices[0].delta.content
+                if token:
+                    yield token
+
+        except Exception as e:
+            error = str(e)
+            if "401" in error:
+                yield "❌ OpenAI API key invalid."
+            elif "429" in error:
+                yield "❌ OpenAI rate limit hit."
+            else:
+                yield f"❌ OpenAI streaming error: {error}"
