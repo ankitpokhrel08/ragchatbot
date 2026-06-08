@@ -10,7 +10,7 @@ _model = None
 def get_model() -> SentenceTransformer:
     global _model
     if _model is None:
-        _model = SentenceTransformer("all-MiniLM-L6-v2", cache_folder="./model_cache")
+        _model = SentenceTransformer("all-MiniLM-L6-v2", cache_folder="./model_cache",local_files_only=False)
     return _model
 
 def embed_chunks(chunks: list[str]) -> np.ndarray:

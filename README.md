@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Drop-in RAG SDK for website chatbots. Add a semantic search chatbot to any website in minutes — no ML experience required.
+Add a semantic search chatbot to any website in minutes. Drop in your docs, get a working API — no ML experience required.
 
 ```bash
 pip install ragchatbot
@@ -17,38 +17,35 @@ Your chatbot API is live at `http://localhost:8000`.
 
 ---
 
-## How It Works
+## What It Does
 
-```
-docs/ (your markdown files)
-    |
-    ↓
-ragchatbot index — parse → chunk → embed → store in ChromaDB
-    |
-    ↓
-POST /ask {"question": "..."}
-    |
-    ↓
-embed query → cosine search → top chunks → Gemini/Ollama → answer + sources
-```
+ragchatbot reads your markdown and text files, understands their meaning, and answers questions grounded in your actual content — not hallucinated responses.
 
-ragchatbot reads your docs, understands their meaning using semantic embeddings, and answers questions grounded in your actual content — not hallucinated responses.
+Ask:
+
+> "what is your refund policy?"
+
+and it finds the answer from your docs.
 
 ---
 
-## Installation
+## Requirements
 
-```bash
-pip install ragchatbot
-```
-
-Requires Python 3.10 or higher.
+- Python 3.10 or higher
+- A Gemini API key (free) — get one at [aistudio.google.com](https://aistudio.google.com)
+- Or Ollama installed locally (no API key needed)
 
 ---
 
 ## Quick Start
 
-### 1. Initialize project
+### Step 1 — Install
+
+```bash
+pip install ragchatbot
+```
+
+### Step 2 — Create a project
 
 ```bash
 mkdir my-chatbot
@@ -58,130 +55,95 @@ ragchatbot init
 
 This creates:
 
-```
+```text
 my-chatbot/
-├── docs/          ← put your markdown/txt files here
-├── chroma_db/     ← auto-managed vector database
-├── model_cache/   ← embedding model cache
-├── .env           ← your config
+├── docs/          ← put your files here
+├── chroma_db/     ← auto-managed (don't touch)
+├── model_cache/   ← auto-managed (don't touch)
+├── .env           ← your settings
 └── .gitignore
 ```
 
-### 2. Add your docs
+### Step 3 — Add your docs
 
-Drop any `.md` or `.txt` files into `docs/`:
+Drop any `.md` or `.txt` files into `docs/`.
 
-```
+Examples:
+
+```text
 docs/
 ├── faq.md
 ├── refund-policy.md
 ├── shipping-policy.md
-└── terms-of-service.txt
+└── terms.txt
 ```
 
-### 3. Configure
+### Step 4 — Configure
 
-Edit `.env`:
+Open `.env` and fill in:
 
 ```env
 GEMINI_API_KEY=your-gemini-api-key
 RAGCHATBOT_DOCS=./docs
 RAGCHATBOT_DB=./chroma_db
 RAGCHATBOT_LLM=gemini
+HF_HUB_OFFLINE=0
 ```
 
-Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com).
+Set `HF_HUB_OFFLINE=0` on first run so the embedding model can download (~80MB, one time only).
 
-### 4. Verify setup
+Set it back to `1` after.
+
+### Step 5 — Verify everything works
 
 ```bash
 ragchatbot verify
 ```
 
-```
+You should see:
+
+```text
 Verifying ragchatbot setup...
-
-  ✅ docs folder — 3 file(s) found
-  ✅ GEMINI_API_KEY — set
-  ✅ ChromaDB — connected
-  ✅ Embedding model — loaded
-
+✅ docs folder — 3 file(s) found
+✅ GEMINI_API_KEY — set
+✅ ChromaDB — connected
+✅ Embedding model — loaded
 All checks passed. Run: ragchatbot start
 ```
 
-### 5. Start
+### Step 6 — Test a query
+
+```bash
+ragchatbot ask "what is your refund policy?"
+```
+
+### Step 7 — Start the server
 
 ```bash
 ragchatbot start
 ```
 
-API live at `http://localhost:8000`.
-Interactive docs at `http://localhost:8000/docs`.
+API live at `http://localhost:8000`
+
+Interactive API docs at `http://localhost:8000/docs`
 
 ---
 
-## CLI Reference
+## Using the API
 
-```bash
-ragchatbot init                          # scaffold project in current directory
-ragchatbot verify                        # check config, connections, docs
-ragchatbot start                         # index docs + start API server
-ragchatbot start --port 9000             # custom port
-ragchatbot start --llm ollama            # use Ollama instead of Gemini
-ragchatbot ask "your question"           # test query from terminal
-ragchatbot ask "question" --llm ollama   # test with specific LLM
-```
-
----
-
-## API Reference
-
-### `POST /ask`
-
-Ask a question against your indexed docs.
-
-**Request:**
-
-```json
-{
-  "question": "How long does a refund take?",
-  "llm": "gemini",
-  "n_results": 3
-}
-```
-
-**Response:**
-
-```json
-{
-  "answer": "Refunds are processed within 5 business days of receiving the returned item.",
-  "sources": ["refund-policy.md"],
-  "question": "How long does a refund take?"
-}
-```
-
-### `GET /health`
-
-```json
-{ "status": "ok", "version": "0.1.0" }
-```
-
-### `GET /stats`
-
-Returns indexing stats — total chunks, files indexed.
-
----
-
-## Frontend Integration
+Once the server is running, your frontend can call it:
 
 ```javascript
 const response = await fetch("http://localhost:8000/ask", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ question: "What is your refund policy?" }),
+  body: JSON.stringify({
+    question: "What is your refund policy?",
+  }),
 });
 
 const data = await response.json();
+
 console.log(data.answer); // answer from your docs
 console.log(data.sources); // ["refund-policy.md"]
 ```
@@ -190,124 +152,77 @@ Works with React, Vue, vanilla JS, Next.js — any frontend.
 
 ---
 
-## LLM Support
-
-### Gemini (default)
-
-Free tier available. Get API key at [aistudio.google.com](https://aistudio.google.com).
-
-```env
-RAGCHATBOT_LLM=gemini
-GEMINI_API_KEY=your-key
-```
-
-### Ollama (fully local)
-
-No API key. No internet. Runs on your machine.
+## CLI Commands
 
 ```bash
-# install ollama
+ragchatbot init                         # set up a new project
+ragchatbot verify                       # check everything is working
+ragchatbot start                        # index docs + start API
+ragchatbot start --port 9000            # use a different port
+ragchatbot start --llm ollama           # use Ollama instead of Gemini
+ragchatbot ask "your question"          # test a query in terminal
+ragchatbot ask "question" --llm ollama  # test with Ollama
+```
+
+---
+
+## Using Ollama Instead of Gemini (Optional)
+
+Ollama runs fully locally — no API key, no internet, no cost.
+
+```bash
 brew install ollama
-
-# start server
 ollama serve
-
-# pull a model
 ollama pull llama3.2
 ```
+
+Update `.env`:
 
 ```env
 RAGCHATBOT_LLM=ollama
 ```
 
-Switch LLM per request via API:
+Or switch per request:
 
 ```json
-{ "question": "...", "llm": "ollama" }
+{
+  "question": "...",
+  "llm": "ollama"
+}
 ```
-
----
-
-## Python API
-
-For advanced use or embedding ragchatbot into existing Python projects:
-
-```python
-from ragchatbot import RAG
-
-rag = RAG(
-    docs="./docs",
-    db_path="./chroma_db",
-    llm="gemini",          # "gemini" or "ollama"
-    n_results=3
-)
-
-rag.index()                # index all docs (skips unchanged)
-
-result = rag.ask("What is your return policy?")
-print(result["answer"])
-print(result["sources"])
-```
-
----
-
-## Configuration
-
-All config lives in `.env`:
-
-| Variable          | Default       | Description                               |
-| ----------------- | ------------- | ----------------------------------------- |
-| `GEMINI_API_KEY`  | —             | Gemini API key (required if using Gemini) |
-| `RAGCHATBOT_DOCS` | `./docs`      | Path to docs folder                       |
-| `RAGCHATBOT_DB`   | `./chroma_db` | Path to ChromaDB storage                  |
-| `RAGCHATBOT_LLM`  | `gemini`      | Default LLM: `gemini` or `ollama`         |
-| `HF_HUB_OFFLINE`  | `1`           | Load embedding model from cache only      |
 
 ---
 
 ## Supported File Types
 
-| Type                | Support                           |
-| ------------------- | --------------------------------- |
-| Markdown (`.md`)    | ✅ Full — strips formatting noise |
-| Plain text (`.txt`) | ✅ Full                           |
-| PDF (`.pdf`)        | 🔜 v0.2                           |
-| DOCX (`.docx`)      | 🔜 v0.2                           |
+| Type              | Status            |
+| ----------------- | ----------------- |
+| Markdown `.md`    | ✅ Supported      |
+| Plain text `.txt` | ✅ Supported      |
+| PDF `.pdf`        | 🔜 Coming in v0.2 |
+| Word `.docx`      | 🔜 Coming in v0.2 |
 
 ---
 
-## How Indexing Works
+## Settings Reference
 
-- Files parsed and split into overlapping chunks (~150 words, 30 word overlap)
-- Each chunk embedded using `all-MiniLM-L6-v2` (local, free, ~80MB)
-- Embeddings stored in ChromaDB with file metadata
-- File hashes tracked — unchanged files skipped on re-index
-- Modified files automatically re-indexed
+All settings live in `.env`:
 
----
-
-## Roadmap
-
-- [ ] PDF and DOCX support
-- [ ] Streaming responses
-- [ ] Remote vector DB support (Qdrant, Pinecone)
-- [ ] OpenAI LLM adapter
-- [ ] Auth on `/ask` endpoint
-- [ ] Auto file-watcher re-indexing
-- [ ] Web UI for testing
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture details and how to add new LLM adapters or file parsers.
+| Setting           | Default       | Description                            |
+| ----------------- | ------------- | -------------------------------------- |
+| `GEMINI_API_KEY`  | —             | Your Gemini API key                    |
+| `RAGCHATBOT_DOCS` | `./docs`      | Folder containing your docs            |
+| `RAGCHATBOT_DB`   | `./chroma_db` | Where vectors are stored               |
+| `RAGCHATBOT_LLM`  | `gemini`      | Which LLM to use: `gemini` or `ollama` |
+| `HF_HUB_OFFLINE`  | `1`           | Set to `0` only on first run           |
 
 ---
 
 ## Links
 
-- PyPI: [pypi.org/project/ragchatbot](https://pypi.org/project/ragchatbot)
-- Issues: [github.com/yourusername/ragchatbot/issues](https://github.com/yourusername/ragchatbot/issues)
+- PyPI: https://pypi.org/project/ragchatbot
+- Issues: https://github.com/yourusername/ragchatbot/issues
+- Contributing: `CONTRIBUTING.md`
 
 ---
 
