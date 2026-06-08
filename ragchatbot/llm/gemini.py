@@ -9,8 +9,9 @@ load_dotenv()
 
 class GeminiLLM(BaseLLM):
 
-    def __init__(self, api_key: str = None, model: str = "gemini-3.5-flash"):
+    def __init__(self, api_key: str = None, model: str = None):
         key = api_key or os.getenv("GEMINI_API_KEY")
+        model = model or os.getenv("ragchatbot_MODEL", "gemini-2.0-flash")
 
         if not key:
             raise ValueError(

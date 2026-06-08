@@ -203,3 +203,17 @@ def collection_stats(db_path: str = "./chroma_db") -> None:
     print(f"Files indexed: {len(sources)}")
     for filename, count in sources.items():
         print(f"  {filename}: {count} chunks")
+
+
+def get_indexed_files(db_path: str = "./chroma_db") -> set[str]:
+    """
+    Return set of all filenames currently indexed in ChromaDB.
+    Used to detect stale files — indexed but no longer in docs/.
+    """
+    collection = get_collection(db_path)
+
+    if collection.count() == 0:
+        return set()
+
+    all_data = collection.get(include=["metadatas"])
+    return {meta["source"] for meta in all_data["metadatas"]}

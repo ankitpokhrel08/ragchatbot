@@ -1,3 +1,4 @@
+import os
 import requests
 from ragchatbot.llm.base import BaseLLM
 
@@ -5,8 +6,8 @@ from ragchatbot.llm.base import BaseLLM
 class OllamaLLM(BaseLLM):
     """Ollama local LLM adapter."""
 
-    def __init__(self, model: str = "llama3.2", host: str = "http://localhost:11434"):
-        self.model = model
+    def __init__(self, model: str = None, host: str = "http://localhost:11434"):
+        self.model = model or os.getenv("ragchatbot_MODEL", "llama3.2")
         self.host = host
         self._verify_connection()
 
@@ -38,9 +39,9 @@ class OllamaLLM(BaseLLM):
                 json={
                     "model": self.model,
                     "prompt": prompt,
-                    "stream": False      # wait for full response
+                    "stream": False
                 },
-                timeout=120             # local models can be slow
+                timeout=120
             )
             response.raise_for_status()
             answer = response.json()["response"].strip()

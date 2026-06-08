@@ -10,16 +10,17 @@ ragchatbot is built in clean layers — each file has one job:
 
 ```text
 ragchatbot/
-├── parser.py       reads .md/.txt, strips formatting noise, returns clean text
+├── parser.py       reads .md/.txt/.pdf/.docx, returns clean plain text
 ├── chunker.py      splits text into 150-word overlapping chunks (30-word overlap)
 ├── embedder.py     generates 384-dim vectors via all-MiniLM-L6-v2
 ├── store.py        all ChromaDB ops — add, query, delete, hash-based skip
 ├── server.py       FastAPI — POST /ask, GET /health, GET /stats, CORS
-├── cli.py          Typer CLI — init, verify, start, ask
+├── cli.py          Typer CLI — setup, init, verify, start, ask
 ├── __init__.py     RAG class — public interface, wires all layers
 └── llm/
     ├── base.py     abstract interface all LLM adapters must implement
     ├── gemini.py   Gemini adapter via google-genai
+    ├── openai.py   OpenAI adapter via openai SDK
     └── ollama.py   Ollama adapter via local HTTP (localhost:11434)
 ```
 
@@ -47,19 +48,58 @@ llm.generate()             # chunks + question -> prompt -> LLM -> answer
 ### Indexing lifecycle
 
 ```text
-ragchatbot start
+ragchatbot start  (or ragchatbot setup)
         |
         v
-server.py lifespan -> RAG.index()
+RAG.index()
+        |
+        v
+get_indexed_files()          # what's currently in ChromaDB
+current_files in docs/       # what's on disk
+        |
+        v
+stale = indexed - current    # files deleted from docs/
+delete_file_chunks(stale)    # remove from ChromaDB
         |
         v
 for each file in docs/:
-    parser.parse_file()      # clean text
+    parser.parse_file()      # clean text (md/txt/pdf/docx)
     chunker.chunk_text()     # split into chunks
     embedder.embed_chunks()  # generate vectors
     store.hash_file()        # MD5 fingerprint
     store.is_file_indexed()  # skip if unchanged
     store.add_chunks()       # store in ChromaDB
+```
+
+### Setup lifecycle
+
+```text
+ragchatbot setup
+        |
+        v
+prompt: LLM choice (gemini / openai / ollama)
+        |
+        v
+prompt: model choice (list + custom option)
+        |
+        v
+prompt: API key (hidden input, skipped for ollama)
+        |
+        v
+write .env fresh
+        |
+        v
+checks: embedding model, ChromaDB, Ollama (if applicable)
+        |
+        v
+scan docs/ for supported files (.md .txt .pdf .docx)
+if empty -> prompt user to add files, wait for confirmation
+        |
+        v
+index all docs with progress output
+        |
+        v
+print next steps
 ```
 
 ---
@@ -74,7 +114,7 @@ source myenv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
 
-# add GEMINI_API_KEY to .env
+# fill in your API key in .env
 ragchatbot verify
 ```
 
@@ -87,13 +127,23 @@ Most common contribution. Every LLM follows the same interface.
 ### 1. Create `ragchatbot/llm/yourllm.py`
 
 ```python
+import os
 from ragchatbot.llm.base import BaseLLM
 
 class YourLLM(BaseLLM):
 
-    def __init__(self, api_key: str = None, model: str = "model-name"):
-        self.client = ...   # init your client
-        self.model = model
+    def __init__(self, api_key: str = None, model: str = None):
+        self.model = model or os.getenv("ragchatbot_MODEL", "default-model-name")
+        key = api_key or os.getenv("YOUR_API_KEY")
+
+        if not key:
+            raise ValueError(
+                "❌ API key not found.\n"
+                "   Set YOUR_API_KEY in .env or pass api_key= directly."
+            )
+
+        self.client = ...   # init your SDK client
+        print(f"YourLLM ready — model: {self.model}")
 
     def generate(self, question: str, context_chunks: list[dict]) -> dict:
         if not context_chunks:
@@ -105,12 +155,13 @@ class YourLLM(BaseLLM):
         prompt = self._build_prompt(question, context_chunks)
         sources = self._extract_sources(context_chunks)
 
-        response = self.client.complete(prompt)
+        try:
+            response = self.client.complete(prompt)
+            answer = response.text.strip()
+        except Exception as e:
+            answer = f"❌ Error: {str(e)}"
 
-        return {
-            "answer": response.text.strip(),
-            "sources": sources
-        }
+        return {"answer": answer, "sources": sources}
 ```
 
 ### 2. Register in `ragchatbot/__init__.py`
@@ -120,33 +171,37 @@ def _load_llm(self, llm: str, **kwargs):
     if llm == "gemini":
         from ragchatbot.llm.gemini import GeminiLLM
         return GeminiLLM(**kwargs)
-
+    elif llm == "openai":
+        from ragchatbot.llm.openai import OpenAILLM
+        return OpenAILLM(**kwargs)
     elif llm == "ollama":
         from ragchatbot.llm.ollama import OllamaLLM
         return OllamaLLM(**kwargs)
-
     elif llm == "yourllm":
         from ragchatbot.llm.yourllm import YourLLM
         return YourLLM(**kwargs)
 ```
 
-### 3. Add dependency to `pyproject.toml`
+### 3. Add to setup options in `cli.py`
+
+Add to the LLM and model menus in the `setup()` command.
+
+### 4. Add dependency to `pyproject.toml`
 
 ```toml
-dependencies = [
-    ...
+[project.optional-dependencies]
+yourllm = [
     "your-llm-sdk",
 ]
 ```
 
-### 4. Test
+### 5. Test
 
 ```python
 from ragchatbot import RAG
 
 rag = RAG(docs="./docs", llm="yourllm")
 rag.index()
-
 print(rag.ask("test question"))
 ```
 
@@ -158,28 +213,31 @@ print(rag.ask("test question"))
 
 ```python
 def parse_file(filepath: str) -> str:
-    if filepath.endswith(".txt"):
-        ...
+    if filepath.endswith(".txt"):   ...
+    if filepath.endswith(".md"):    ...
+    if filepath.endswith(".pdf"):   ...
+    if filepath.endswith(".docx"):  ...
+    if filepath.endswith(".html"):
+        return _parse_html(filepath)
 
-    if filepath.endswith(".md"):
-        ...
+    raise ValueError(f"Unsupported file type: {filepath}")
 
-    if filepath.endswith(".pdf"):
-        return parse_pdf(filepath)
-
-def parse_pdf(filepath: str) -> str:
+def _parse_html(filepath: str) -> str:
     # extract and return clean text
     ...
 ```
 
-### 2. Update file filter in `ragchatbot/__init__.py`
+### 2. Update file filters in `ragchatbot/__init__.py` and `ragchatbot/cli.py`
 
 ```python
-# change this
-if not filename.endswith((".md", ".txt")):
+# __init__.py — index()
+current_files = {
+    f for f in os.listdir(self.docs)
+    if f.endswith((".md", ".txt", ".pdf", ".docx", ".html"))
+}
 
-# to this
-if not filename.endswith((".md", ".txt", ".pdf")):
+# cli.py — verify() and setup()
+supported = (".md", ".txt", ".pdf", ".docx", ".html")
 ```
 
 ### 3. Add dependency to `pyproject.toml`
@@ -188,18 +246,18 @@ if not filename.endswith((".md", ".txt", ".pdf")):
 
 ## Guidelines
 
-### We welcome:
+### We welcome
 
 - Bug fixes
-- New LLM adapters (OpenAI, Anthropic, Cohere)
-- New file parsers (PDF, DOCX, HTML)
+- New LLM adapters (Anthropic, Cohere, Mistral)
+- New file parsers (HTML, CSV, EPUB)
 - Test coverage
 - Documentation improvements
 
-### Save for v0.2+
+### Backlog — not yet
 
 - Streaming responses
-- Remote vector DBs
+- Remote vector DBs (Qdrant, Pinecone)
 - Web UI
 - Auth on `/ask`
 - Auto file-watcher
@@ -210,13 +268,14 @@ if not filename.endswith((".md", ".txt", ".pdf")):
 - Type hints on all functions
 - Docstrings on public methods
 - Don't change `BaseLLM` interface — it's the contract
-- No new dependencies without discussion
+- No new core dependencies without discussion (optional deps via `[project.optional-dependencies]` are fine)
+- Error messages must be human-readable — no raw tracebacks to the user
 
 ### Commit format
 
 ```text
-feat: add OpenAI adapter
-fix: handle empty docs folder
+feat: add Anthropic adapter
+fix: handle corrupted PDF during indexing
 docs: update contributing guide
 refactor: simplify chunker logic
 ```
@@ -226,13 +285,13 @@ refactor: simplify chunker logic
 ## Submitting a PR
 
 ```bash
-git checkout -b feat/openai-adapter
+git checkout -b feat/anthropic-adapter
 
 # make changes + write tests
 pytest tests/
 
-git commit -m "feat: add OpenAI adapter"
-git push origin feat/openai-adapter
+git commit -m "feat: add Anthropic adapter"
+git push origin feat/anthropic-adapter
 ```
 
 PR must include:

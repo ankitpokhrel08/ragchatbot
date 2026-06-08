@@ -7,7 +7,9 @@ from ragchatbot.store import (
     is_file_indexed,
     add_chunks,
     query_chunks,
-    collection_stats
+    collection_stats,
+    delete_file_chunks,
+    get_indexed_files
 )
 
 
@@ -40,32 +42,53 @@ class RAG:
         self.llm = self._load_llm(llm, **llm_kwargs)
 
     def _load_llm(self, llm: str, **kwargs):
-        """
-        Load LLM adapter by name.
-        Lazy import — only imports what's needed.
-        """
         if llm == "gemini":
             from ragchatbot.llm.gemini import GeminiLLM
             return GeminiLLM(**kwargs)
-
         elif llm == "ollama":
             from ragchatbot.llm.ollama import OllamaLLM
             return OllamaLLM(**kwargs)
-
+        elif llm == "openai":
+            from ragchatbot.llm.openai import OpenAILLM
+            return OpenAILLM(**kwargs)
         else:
             raise ValueError(
-                f"Unknown LLM: '{llm}'. "
-                f"Supported: 'gemini', 'ollama'"
+                f"❌ Unknown LLM: '{llm}'\n"
+                f"   Supported: gemini, openai, ollama"
             )
 
     def index(self) -> None:
-        """Index all .md and .txt files. Skips unchanged files."""
-        print(f"Indexing {self.docs}...")
+        """Index all .md, .txt, .pdf files. Skips unchanged. Deletes stale."""
 
-        for filename in os.listdir(self.docs):
-            if not filename.endswith((".md", ".txt")):
-                continue
+        # guard: docs folder must exist
+        if not os.path.exists(self.docs):
+            raise FileNotFoundError(
+                f"❌ Docs folder not found: '{self.docs}'\n"
+                f"   Create it and add your files, or set RAGCHATBOT_DOCS in .env"
+            )
 
+        current_files = {
+            f for f in os.listdir(self.docs)
+            if f.endswith((".md", ".txt", ".pdf",".docx"))
+        }
+
+        # guard: at least one doc
+        if not current_files:
+            raise ValueError(
+                f"❌ No docs found in '{self.docs}'\n"
+                f"   Add .md, .txt, or .pdf files and try again."
+            )
+
+        from ragchatbot.store import get_indexed_files
+        indexed_files = get_indexed_files(self.db_path)
+        stale_files = indexed_files - current_files
+
+        for filename in stale_files:
+            filepath = os.path.join(self.docs, filename)
+            delete_file_chunks(filepath, self.db_path)
+            print(f"Deleted stale chunks for {filename}")
+
+        for filename in current_files:
             filepath = os.path.join(self.docs, filename)
             file_hash = hash_file(filepath)
 
@@ -74,10 +97,14 @@ class RAG:
                 continue
 
             print(f"Indexing {filename}...")
-            text = parse_file(filepath)
-            chunks = chunk_text(text)
-            embeddings = embed_chunks(chunks)
-            add_chunks(filepath, chunks, embeddings, file_hash, self.db_path)
+            try:
+                text = parse_file(filepath)
+                chunks = chunk_text(text)
+                embeddings = embed_chunks(chunks)
+                add_chunks(filepath, chunks, embeddings, file_hash, self.db_path)
+            except Exception as e:
+                print(f"⚠️  Skipping {filename} — {str(e)}")
+                continue
 
         print("Indexing complete.")
 
