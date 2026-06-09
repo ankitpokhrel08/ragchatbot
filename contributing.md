@@ -1,12 +1,12 @@
 # Contributing to ragchatbot
 
-ragchatbot is a drop-in RAG SDK for website chatbots. Contributions welcome — bug fixes, new LLM adapters, new file parsers, tests, and docs.
+ragchatbot is a drop-in RAG SDK for website chatbots. Contributions welcome, bug fixes, new LLM adapters, new file parsers, tests, and docs.
 
 ---
 
 ## Architecture
 
-ragchatbot is built in clean layers — each file has one job:
+ragchatbot is built in clean layers, each file has one job:
 
 ```text
 ragchatbot/

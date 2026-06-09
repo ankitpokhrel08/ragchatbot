@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Add a semantic search chatbot to any website in minutes. Drop in your docs, get a working API — no ML experience required.
+Add a semantic search chatbot to any website in minutes. Drop in your docs, get a working API, no ML experience required.
 
 ```bash
 pip install ragchatbot
@@ -17,7 +17,7 @@ Your chatbot API is live at `http://localhost:8000`.
 
 ## What It Does
 
-ragchatbot reads your documents, understands their meaning, and answers questions grounded in your actual content — not hallucinated responses.
+ragchatbot reads your documents, understands their meaning, and answers questions grounded in your actual content, not hallucinated responses.
 
 Ask:
 
@@ -74,7 +74,7 @@ docs/
 └── terms.txt
 ```
 
-Then press `y` when setup prompts you — it will index everything.
+Then press `y` when setup prompts you, it will index everything.
 
 ### Step 4 — Ask a question
 
