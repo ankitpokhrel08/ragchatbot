@@ -17,7 +17,7 @@ load_dotenv()
 
 class AskRequest(BaseModel):
     question: str
-    llm: str = "gemini"
+    llm: str = None
     n_results: int = 3
     stream: bool = False
 
@@ -124,20 +124,12 @@ def stats():
 
 @app.post("/ask", dependencies=[Depends(verify_api_key)])
 def ask(request: AskRequest):
-    """
-    Ask a question against indexed docs.
-
-    Body:
-        question:  user's question
-        llm:       gemini | openai | ollama
-        n_results: chunks to retrieve (default 3)
-        stream:    stream tokens (default false)
-    """
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
     try:
-        rag = get_rag(request.llm, request.n_results)
+        llm = request.llm or os.getenv("ragchatbot_LLM", "gemini")
+        rag = get_rag(llm, request.n_results)
 
         if request.stream:
             sources, token_stream = rag.ask_stream(request.question)
@@ -145,13 +137,9 @@ def ask(request: AskRequest):
             def event_stream():
                 for token in token_stream:
                     yield token
-                # send sources as final JSON chunk
                 yield f"\n\n__sources__:{json.dumps(sources)}"
 
-            return StreamingResponse(
-                event_stream(),
-                media_type="text/plain"
-            )
+            return StreamingResponse(event_stream(), media_type="text/plain")
 
         else:
             result = rag.ask(request.question)

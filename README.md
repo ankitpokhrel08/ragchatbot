@@ -162,13 +162,12 @@ ragchatbot ask "question" --llm ollama  # ask using a specific LLM
 ragchatbot start                        # index docs + start API server
 ragchatbot start --port 9000            # use a different port
 ragchatbot start --llm ollama           # start with a specific LLM
+ragchatbot llm                          # show current LLM setup and switch if needed
 ragchatbot stats                        # show what's indexed in ChromaDB
 ragchatbot verify                       # re-check everything is working
 ragchatbot init                         # scaffold folders + .env manually (advanced)
 ragchatbot --help                       # show all commands
 ```
-
----
 
 ## Auth on `/ask`
 
@@ -244,16 +243,16 @@ ragchatbot_MODEL=gpt-4o-mini
 
 All settings live in `.env` (created automatically by `ragchatbot setup`):
 
-| Setting              | Default         | Description                                 |
-| -------------------- | --------------- | ------------------------------------------- |
-| `GEMINI_API_KEY`     | —               | Your Gemini API key                         |
-| `OPENAI_API_KEY`     | —               | Your OpenAI API key                         |
-| `ragchatbot_DOCS`    | `./docs`        | Folder containing your docs                 |
-| `ragchatbot_DB`      | `./chroma_db`   | Where vectors are stored                    |
-| `ragchatbot_LLM`     | `gemini`        | Which LLM: `gemini`, `openai`, or `ollama`  |
-| `ragchatbot_MODEL`   | per LLM default | Model name — set automatically during setup |
-| `RAGCHATBOT_API_KEY` | —               | Protect `/ask` with this key (optional)     |
-| `HF_HUB_OFFLINE`     | `1`             | Set to `0` only on first run                |
+| Setting              | Default         | Description                                              |
+| -------------------- | --------------- | -------------------------------------------------------- |
+| `GEMINI_API_KEY`     | —               | Your Gemini API key                                      |
+| `OPENAI_API_KEY`     | —               | Your OpenAI API key                                      |
+| `ragchatbot_DOCS`    | `./docs`        | Folder containing your docs                              |
+| `ragchatbot_DB`      | `./chroma_db`   | Where vectors are stored                                 |
+| `ragchatbot_LLM`     | `gemini`        | Which LLM: `gemini`, `openai`, or `ollama`               |
+| `ragchatbot_MODEL`   | per LLM default | Model name — set automatically during setup              |
+| `RAGCHATBOT_API_KEY` | —               | Protect `/ask` with this key (optional)                  |
+| `HF_HUB_OFFLINE`     | `0`             | Set to `1` after first run to use cached embedding model |
 
 ---
 

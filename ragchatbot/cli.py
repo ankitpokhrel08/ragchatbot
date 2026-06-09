@@ -2,7 +2,33 @@ import os
 import typer
 from dotenv import load_dotenv
 
+
 load_dotenv()
+
+def _update_env(key: str, value: str):
+    """Update or append a key in .env file."""
+    env_path = ".env"
+    lines = []
+
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+
+    updated = False
+    for i, line in enumerate(lines):
+        if line.startswith(f"{key}="):
+            lines[i] = f"{key}={value}\n"
+            updated = True
+            break
+
+    if not updated:
+        lines.append(f"{key}={value}\n")
+
+    with open(env_path, "w") as f:
+        f.writelines(lines)
+
+    # reflect change in current process
+    os.environ[key] = value
 
 app = typer.Typer(
     name="ragchatbot",
@@ -442,6 +468,119 @@ def verify():
         typer.echo("All checks passed. Run: ragchatbot start")
     else:
         typer.echo("Fix the issues above then run verify again.")
+
+
+# LLM STATUS AND CHANGE
+# ── LLM ───────────────────────────────────────────────────────────────────────
+
+@app.command()
+def llm():
+    """Show current LLM setup and optionally change it."""
+
+    typer.echo("\n── Current LLM Setup ──\n")
+
+    current_llm = os.getenv("ragchatbot_LLM", "not set")
+    current_model = os.getenv("ragchatbot_MODEL", "not set")
+
+    llm_model_map = {
+        "gemini": os.getenv("ragchatbot_MODEL_GEMINI") or current_model,
+        "openai": os.getenv("ragchatbot_MODEL_OPENAI") or current_model,
+        "ollama": os.getenv("ragchatbot_MODEL_OLLAMA") or current_model,
+    }
+
+    typer.echo(f"  LLM:   {current_llm}")
+    typer.echo(f"  Model: {current_model}\n")
+
+    # show all three with current marker
+    llm_options = ["gemini", "openai", "ollama"]
+    for i, name in enumerate(llm_options, 1):
+        marker = " ◀ current" if name == current_llm else ""
+        model_hint = llm_model_map.get(name, "")
+        typer.echo(f"  {i}. {name}  ({model_hint}){marker}")
+
+    typer.echo(f"  4. Keep current\n")
+
+    choice = typer.prompt("Switch to").strip()
+
+    if choice == "4" or choice == current_llm:
+        typer.echo("No changes made.")
+        raise typer.Exit(0)
+
+    llm_map = {"1": "gemini", "2": "openai", "3": "ollama"}
+    if choice not in llm_map:
+        typer.echo("❌ Invalid choice.")
+        raise typer.Exit(1)
+
+    new_llm = llm_map[choice]
+
+    # ── pick model ────────────────────────────────────────────────────────────
+    model_options = {
+        "gemini": [("gemini-3.5-flash", "recommended"), ("gemini-3.1-pro", "more capable")],
+        "openai": [("gpt-4o-mini", "recommended"), ("gpt-4o", "more capable")],
+        "ollama": [("llama3.2", "recommended"), ("mistral", "")],
+    }
+
+    options = model_options[new_llm]
+    typer.echo(f"\nChoose model for {new_llm}:\n")
+    for i, (name, note) in enumerate(options, 1):
+        label = f"  {i}. {name}"
+        if note:
+            label += f"  ({note})"
+        typer.echo(label)
+    typer.echo(f"  {len(options) + 1}. Other (type manually)\n")
+
+    model_choice = typer.prompt("Enter number").strip()
+
+    if model_choice.isdigit() and 1 <= int(model_choice) <= len(options):
+        new_model = options[int(model_choice) - 1][0]
+    elif model_choice == str(len(options) + 1):
+        new_model = typer.prompt("Enter model name").strip()
+    else:
+        typer.echo("❌ Invalid choice.")
+        raise typer.Exit(1)
+
+    # ── handle API key if switching to gemini/openai ──────────────────────────
+    if new_llm == "gemini":
+        existing = os.getenv("GEMINI_API_KEY", "")
+        if not existing or existing == "your-gemini-api-key":
+            typer.echo("\nGemini API key required.")
+            typer.echo("  Get a free key at: https://aistudio.google.com\n")
+            new_key = typer.prompt("Enter API key", hide_input=True).strip()
+            if not new_key:
+                typer.echo("❌ API key cannot be empty.")
+                raise typer.Exit(1)
+            _update_env("GEMINI_API_KEY", new_key)
+        else:
+            typer.echo("  ✅ GEMINI_API_KEY already set")
+
+    elif new_llm == "openai":
+        existing = os.getenv("OPENAI_API_KEY", "")
+        if not existing or existing == "your-openai-api-key":
+            typer.echo("\nOpenAI API key required.")
+            typer.echo("  Get a key at: https://platform.openai.com/api-keys\n")
+            new_key = typer.prompt("Enter API key", hide_input=True).strip()
+            if not new_key:
+                typer.echo("❌ API key cannot be empty.")
+                raise typer.Exit(1)
+            _update_env("OPENAI_API_KEY", new_key)
+        else:
+            typer.echo("  ✅ OPENAI_API_KEY already set")
+
+    elif new_llm == "ollama":
+        try:
+            import requests as req
+            req.get("http://localhost:11434/api/tags", timeout=3).raise_for_status()
+            typer.echo("  ✅ Ollama server running")
+        except Exception:
+            typer.echo("  ❌ Ollama not running. Start with: ollama serve")
+            raise typer.Exit(1)
+
+    # ── update .env ───────────────────────────────────────────────────────────
+    _update_env("ragchatbot_LLM", new_llm)
+    _update_env("ragchatbot_MODEL", new_model)
+
+    typer.echo(f"\n  ✅ Switched to {new_llm} / {new_model}")
+    typer.echo(f"  Run: ragchatbot ask \"test question\"")
 
 
 # ── ENTRY POINT ───────────────────────────────────────────────────────────────

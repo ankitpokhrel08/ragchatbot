@@ -15,7 +15,7 @@ ragchatbot/
 ├── embedder.py     generates 384-dim vectors via all-MiniLM-L6-v2
 ├── store.py        all ChromaDB ops — add, query, delete, hash-based skip
 ├── server.py       FastAPI — POST /ask, GET /health, GET /stats, CORS, auth
-├── cli.py          Typer CLI — setup, init, verify, start, ask, stats
+├── cli.py          Typer CLI — setup, init, verify, start, ask, stats, llm
 ├── __init__.py     RAG class — public interface, wires all layers
 └── llm/
     ├── base.py     abstract interface — generate() and generate_stream() required
@@ -164,9 +164,13 @@ def _load_llm(self, llm: str, **kwargs):
         return YourLLM(**kwargs)
 ```
 
-### 3. Add to setup options in `cli.py`
+### 3.1 Add to setup options in `cli.py`
 
 Add to the LLM and model menus in the `setup()` command.
+
+### 3.2 Add to CLI menus in `cli.py`
+
+Add to the LLM and model menus in both `setup()` and `llm()` commands.
 
 ### 4. Add dependency to `pyproject.toml`
 
@@ -257,6 +261,7 @@ pytest tests/ -v
 
 - Streaming responses ✅ done
 - Auth on `/ask` ✅ done
+- `ragchatbot llm` command ✅ done
 - Remote vector DBs (Qdrant, Pinecone)
 - Web UI
 - Auto file-watcher
