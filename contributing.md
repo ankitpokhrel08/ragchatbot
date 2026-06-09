@@ -14,7 +14,7 @@ ragchatbot/
 ├── chunker.py      splits text into 150-word overlapping chunks (30-word overlap)
 ├── embedder.py     generates 384-dim vectors via all-MiniLM-L6-v2
 ├── store.py        all ChromaDB ops — add, query, delete, hash-based skip
-├── server.py       FastAPI — POST /ask, GET /health, GET /stats, CORS, auth
+├── server.py       FastAPI — POST /ask (auth), POST /chat (open), GET /health, GET /stats
 ├── cli.py          Typer CLI — setup, init, verify, start, ask, stats, llm
 ├── __init__.py     RAG class — public interface, wires all layers
 └── llm/

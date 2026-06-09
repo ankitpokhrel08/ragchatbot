@@ -115,6 +115,19 @@ def health():
     return {"status": "ok", "version": "1.0.0"}
 
 
+@app.post("/chat")
+async def chat_proxy(request: AskRequest):
+    """Public-facing endpoint — no key needed from browser."""
+    llm = request.llm or os.getenv("ragchatbot_LLM", "gemini")
+    rag = get_rag(llm, request.n_results)
+    result = rag.ask(request.question)
+    return AskResponse(
+        answer=result["answer"],
+        sources=result["sources"],
+        question=request.question
+    )
+
+
 @app.get("/stats")
 def stats():
     """Return indexing stats."""

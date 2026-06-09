@@ -96,6 +96,20 @@ Interactive API docs at `http://localhost:8000/docs`
 
 ## Using the API
 
+### Browser-safe endpoint — `/chat`
+
+If you're calling ragchatbot from a frontend (React, Vue, vanilla JS), use `/chat` instead of `/ask`. No API key needed in the browser.
+
+```javascript
+const response = await fetch("http://localhost:8000/chat", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ question: "What is your refund policy?" }),
+});
+```
+
+Use `/ask` only from your own backend or CLI — it requires `X-API-Key`.
+
 Once the server is running, your frontend can call it:
 
 ```javascript
